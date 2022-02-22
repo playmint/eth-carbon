@@ -4,12 +4,21 @@ type Response<Type> = {
     status: string,
     message: string,
     result: Type
-}
+};
+
+type RawTransaction = {
+    input: string,
+    gasUsed: string,
+    isError: string
+};
 
 type Transaction = {
     input: string,
-    gasUsed: number
-}
+    gasUsed: number,
+    isError: boolean,
+    isContractCreation: boolean,
+    selector: string
+};
 
 async function get(url: string): Promise<string>
 {
@@ -31,21 +40,20 @@ async function get(url: string): Promise<string>
     });
 }
 
-export default async function()
+export async function getTransactions()
 {
-
-    /*let provider = new ethers.providers.EtherscanProvider("homestead", "MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T");
-    console.log(await provider.getBalance("0xfE4Aab053FED3cFbB7e5f6434e1585b4F17CC207"));
-
-    let txns = await provider.getHistory("0x38065291fdce1a752afd725e96ff75e1c38ad6aa");
-    console.log(txns);*/
-
     // TODO paging
-    const responseStr = await get("https://api.etherscan.io/api?module=account&action=txlist&address=0x38065291fdce1a752afd725e96ff75e1c38ad6aa&sort=asc&apikey=MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T");
-    const response:Response<Transaction[]> = JSON.parse(responseStr);
-    response.result = response.result.map((transaction: Transaction) => {
-        transaction.gasUsed = parseInt(transaction.gasUsed as any);
-        return transaction;
+    const responseStr = await get("https://api.etherscan.io/api?module=account&action=txlist&address=0x938034c188c7671cabdb80d19cd31b71439516a9&sort=asc&apikey=MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T");
+    const response: Response<RawTransaction[]> = JSON.parse(responseStr);
+    const transactions: Transaction[] = response.result.map((transaction: RawTransaction) => {
+        return {
+            input: transaction.input,
+            gasUsed: parseInt(transaction.gasUsed),
+            isError: transaction.isError == "1",
+            isContractCreation: transaction.input.substring(10, 66) != "00000000000000000000000000000000000000000000000000000000",  // if it's a function call the first word will be the 4 byte selector followed by zeroes, if it's a contract creation then all 32 bytes will be used
+            selector: transaction.input.substring(2, 10)
+        };
     });
-    console.log(response.result);
+    
+    return transactions;
 }
