@@ -16,7 +16,6 @@ type Transaction = {
     input: string,
     gasUsed: number,
     isError: boolean,
-    isContractCreation: boolean,
     selector: string
 };
 
@@ -40,20 +39,64 @@ async function get(url: string): Promise<string>
     });
 }
 
-export async function getTransactions()
+export async function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>
 {
     // TODO paging
-    const responseStr = await get("https://api.etherscan.io/api?module=account&action=txlist&address=0x938034c188c7671cabdb80d19cd31b71439516a9&sort=asc&apikey=MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T");
+    const responseStr = await get(`https://api.etherscan.io/api?module=account&action=txlist&address=${address}&sort=asc&apikey=${apiKey}`);
     const response: Response<RawTransaction[]> = JSON.parse(responseStr);
     const transactions: Transaction[] = response.result.map((transaction: RawTransaction) => {
         return {
             input: transaction.input,
             gasUsed: parseInt(transaction.gasUsed),
             isError: transaction.isError == "1",
-            isContractCreation: transaction.input.substring(10, 66) != "00000000000000000000000000000000000000000000000000000000",  // if it's a function call the first word will be the 4 byte selector followed by zeroes, if it's a contract creation then all 32 bytes will be used
-            selector: transaction.input.substring(2, 10)
+            selector: transaction.input.substring(2, 10).toLowerCase()
         };
     });
     
     return transactions;
+}
+
+type ContractFilter = {
+    address: string,
+    shouldIncludeContractCreation: boolean,
+    shouldIncludeFailedTransactions: boolean,
+    selectors?: Set<string>
+};
+
+export async function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{[address: string]: Transaction[]}>
+{
+    let result: {[address: string]: Transaction[]} = {};
+
+    for (let i = 0; i < contracts.length; ++i)
+    {
+        const contract = contracts[i];
+
+        // TODO if it's only wanting contract creation could optimise the etherscan call
+        let filteredTransactions = [];
+        let transactions = await getTransactionsForAddress(apiKey, contract.address);
+
+        if (contract.shouldIncludeContractCreation)
+        {
+            filteredTransactions.push(transactions[0]);
+        }
+        
+        for (let j = 1; j < transactions.length; ++j)
+        {
+            if (!contract.shouldIncludeFailedTransactions && transactions[j].isError)
+            {
+                continue;
+            }
+
+            if (contract.selectors && !contract.selectors.has(transactions[j].selector))
+            {
+                continue;
+            }
+
+            filteredTransactions.push(transactions[j]);
+        }
+
+        result[contract.address] = filteredTransactions;
+    }
+    
+    return result;
 }
