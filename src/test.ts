@@ -1,3 +1,11 @@
 import ethCarbon from "./index"
 
-ethCarbon();
+async function main()
+{
+    await ethCarbon();
+}
+
+main().catch((e) =>
+{
+    console.error(e);
+});
