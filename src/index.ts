@@ -59,9 +59,9 @@ export async function getTransactionsForAddress(apiKey: string, address: string)
 
 type ContractFilter = {
     address: string,
-    shouldIncludeContractCreation: boolean,
-    shouldIncludeFailedTransactions: boolean,
-    selectors?: Set<string>,
+    shouldIncludeContractCreation?: boolean,    // default is true
+    shouldIncludeFailedTransactions?: boolean,  // default false
+    selectors?: Set<string>,                    // default includes everything
     functions?: Set<string>
 };
 
@@ -72,6 +72,12 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
     for (let i = 0; i < contracts.length; ++i)
     {
         const contract = contracts[i];
+
+        if (contract.shouldIncludeContractCreation == undefined)
+        {
+            // default to true for this
+            contract.shouldIncludeContractCreation = true;
+        }
 
         if (contract.functions)
         {

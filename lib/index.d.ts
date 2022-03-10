@@ -7,8 +7,8 @@ declare type Transaction = {
 export declare function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>;
 declare type ContractFilter = {
     address: string;
-    shouldIncludeContractCreation: boolean;
-    shouldIncludeFailedTransactions: boolean;
+    shouldIncludeContractCreation?: boolean;
+    shouldIncludeFailedTransactions?: boolean;
     selectors?: Set<string>;
     functions?: Set<string>;
 };
