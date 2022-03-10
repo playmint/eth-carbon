@@ -8,10 +8,7 @@ async function main()
             {address: "0x938034c188C7671cAbDb80D19cd31b71439516a9"},
             // relic - only creation/init/addWhitelistedMinter
             {address: "0x38065291fDce1A752afD725e96FF75E1c38aD6aa",
-            functions: new Set<string>([
-                "init(string, string, address, string, string, string, string, string, string, uint256, address)",
-                "addWhitelistedMinter(address)"
-            ])},
+            functions: new Set<string>(["init", "addWhitelistedMinter"])},
             // lootClassification - everything
             {address: "0xC6Df003DC044582A45e712BA219719410013ad63"},
             // competition minter - everything

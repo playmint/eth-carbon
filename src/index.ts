@@ -7,6 +7,12 @@ type Response<Type> = {
     result: Type
 };
 
+type RPCResponse = {
+    jsonrpc: string,
+    id: Number,
+    result: string
+};
+
 type RawTransaction = {
     input: string,
     gasUsed: string,
@@ -19,6 +25,11 @@ type Transaction = {
     isError: boolean,
     selector: string
 };
+
+type ABIItem = {
+    type: string,
+    inputs:
+}
 
 async function get(url: string): Promise<string>
 {
@@ -42,7 +53,7 @@ async function get(url: string): Promise<string>
 
 export async function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>
 {
-    // TODO paging
+    // TODO paging 
     const responseStr = await get(`https://api.etherscan.io/api?module=account&action=txlist&address=${address}&sort=asc&apikey=${apiKey}`);
     const response: Response<RawTransaction[]> = JSON.parse(responseStr);
     const transactions: Transaction[] = response.result.map((transaction: RawTransaction) => {
@@ -81,6 +92,46 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
 
         if (contract.functions)
         {
+            // if any function sigs are just the name, then we'll need to look
+            // the contract up on etherscan
+            let functionsToLookUp = [];
+            contract.functions.forEach((func) =>
+            {
+                if (func.indexOf("(") == -1)
+                {
+                    functionsToLookUp.push(func);
+                }
+            });
+
+            if (functionsToLookUp.length > 0)
+            {
+                let addressForABI = contract.address;
+
+                {
+                    const responseStr = await get(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contract.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
+                    const response: RPCResponse = JSON.parse(responseStr);
+                    
+                    if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000")
+                    {
+                        console.log(contract.address, "is a proxy");
+
+                        // the result will be zero padded, addresses are 20 bytes,
+                        // so we want to chop off 12 bytes (24 characters) + 2 for
+                        // the 0x prefix
+                        addressForABI = "0x" + response.result.substring(26);
+                    }
+                    else
+                    {
+                        console.log(contract.address, "is not a proxy");
+                    }
+                }
+
+                const responseStr = await get(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
+                const response: Response<string> = JSON.parse(responseStr);
+                const abi:ABIFunction[] = JSON.parse(response.result);
+                console.log(abi);
+            }
+
             if (!contract.selectors)
             {
                 contract.selectors = new Set<string>();
