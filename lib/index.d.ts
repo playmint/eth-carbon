@@ -10,6 +10,7 @@ declare type ContractFilter = {
     shouldIncludeContractCreation: boolean;
     shouldIncludeFailedTransactions: boolean;
     selectors?: Set<string>;
+    functions?: Set<string>;
 };
 export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
     [address: string]: Transaction[];

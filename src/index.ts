@@ -1,4 +1,5 @@
 import * as https from "https";
+import keccak256 from "keccak256";
 
 type Response<Type> = {
     status: string,
@@ -60,7 +61,8 @@ type ContractFilter = {
     address: string,
     shouldIncludeContractCreation: boolean,
     shouldIncludeFailedTransactions: boolean,
-    selectors?: Set<string>
+    selectors?: Set<string>,
+    functions?: Set<string>
 };
 
 export async function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{[address: string]: Transaction[]}>
@@ -70,6 +72,19 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
     for (let i = 0; i < contracts.length; ++i)
     {
         const contract = contracts[i];
+
+        if (contract.functions)
+        {
+            if (!contract.selectors)
+            {
+                contract.selectors = new Set<string>();
+            }
+
+            contract.functions.forEach((func) =>
+            {
+                contract.selectors!.add(keccak256(func.replace(/ /g, "")).toString("hex").substring(0, 8));
+            });
+        }
 
         // TODO if it's only wanting contract creation could optimise the etherscan call
         let filteredTransactions = [];

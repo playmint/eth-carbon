@@ -12,9 +12,9 @@ async function main()
             {address: "0x38065291fDce1A752afD725e96FF75E1c38aD6aa",
             shouldIncludeContractCreation: true,
             shouldIncludeFailedTransactions: false,
-            selectors: new Set<string>([
-                "1acbd301", // init
-                "168a35fa", // addWhitelistedMinter
+            functions: new Set<string>([
+                "init(string, string, address, string, string, string, string, string, string, uint256, address)",
+                "addWhitelistedMinter(address)"
             ])},
             // lootClassification - everything
             {address: "0xC6Df003DC044582A45e712BA219719410013ad63",
