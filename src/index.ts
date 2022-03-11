@@ -26,10 +26,19 @@ type Transaction = {
     selector: string
 };
 
-type ABIItem = {
+type ABIField = {
+    name: string,
     type: string,
-    inputs:
-}
+    components?: ABIField[]
+};
+
+type ABIFunction = {
+    type: "function" | "constructor" | "receive" | "fallback",
+    name: string,
+    inputs: ABIField[],
+    outputs?: ABIField[],
+    stateMutability: "pure" | "view" | "payable" | "nonpayable"
+};
 
 async function get(url: string): Promise<string>
 {
@@ -92,18 +101,27 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
 
         if (contract.functions)
         {
-            // if any function sigs are just the name, then we'll need to look
-            // the contract up on etherscan
-            let functionsToLookUp = [];
+            if (!contract.selectors)
+            {
+                contract.selectors = new Set<string>();
+            }
+
+            let functionsToLookUp = new Map<string, ABIFunction | undefined>();
             contract.functions.forEach((func) =>
             {
+                // if any function sigs are just the name, then we'll need to look
+                // the contract up on etherscan
                 if (func.indexOf("(") == -1)
                 {
-                    functionsToLookUp.push(func);
+                    functionsToLookUp.set(func, undefined); // we'll fill in the function later when we find it
+                }
+                else
+                {
+                    contract.selectors!.add(keccak256(func.replace(/ /g, "")).toString("hex").substring(0, 8));
                 }
             });
 
-            if (functionsToLookUp.length > 0)
+            if (functionsToLookUp.size > 0)
             {
                 let addressForABI = contract.address;
 
@@ -126,21 +144,36 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
                     }
                 }
 
+                // TODO detect if etherscan doesn't have the ABI and return a useful error
                 const responseStr = await get(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
                 const response: Response<string> = JSON.parse(responseStr);
-                const abi:ABIFunction[] = JSON.parse(response.result);
-                console.log(abi);
-            }
+                const abi: ABIFunction[] = JSON.parse(response.result);
+                for (let i = 0; i < abi.length; ++i)
+                {
+                    if (abi[i].type == "function" && functionsToLookUp.has(abi[i].name))
+                    {
+                        if (functionsToLookUp.get(abi[i].name) == undefined)
+                        {
+                            functionsToLookUp.set(abi[i].name, abi[i]);
 
-            if (!contract.selectors)
-            {
-                contract.selectors = new Set<string>();
-            }
+                            let sig = `${abi[i].name}(${abi[i].inputs.map((value) => value.type).join(",")})`;
+                            contract.selectors!.add(keccak256(sig).toString("hex").substring(0, 8));
+                        }
+                        else
+                        {
+                            throw `${contract.address}: multiple functions found with name '${abi[i].name}'`;
+                        }
+                    }
+                }
 
-            contract.functions.forEach((func) =>
-            {
-                contract.selectors!.add(keccak256(func.replace(/ /g, "")).toString("hex").substring(0, 8));
-            });
+                functionsToLookUp.forEach((value, key) =>
+                {
+                    if (value == undefined)
+                    {
+                        throw `${contract.address}: no function found with name '${key}'`;
+                    }
+                });
+            }
         }
 
         // TODO if it's only wanting contract creation could optimise the etherscan call
