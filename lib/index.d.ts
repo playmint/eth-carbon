@@ -4,6 +4,18 @@ declare type Transaction = {
     isError: boolean;
     selector: string;
 };
+declare type ABIField = {
+    name: string;
+    type: string;
+    components?: ABIField[];
+};
+declare type ABIFunction = {
+    type: "function" | "constructor" | "receive" | "fallback";
+    name: string;
+    inputs: ABIField[];
+    outputs?: ABIField[];
+    stateMutability: "pure" | "view" | "payable" | "nonpayable";
+};
 export declare function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>;
 declare type ContractFilter = {
     address: string;
@@ -11,6 +23,7 @@ declare type ContractFilter = {
     shouldIncludeFailedTransactions?: boolean;
     selectors?: Set<string>;
     functions?: Set<string>;
+    abi?: string | ABIFunction[];
 };
 export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
     [address: string]: Transaction[];

@@ -82,7 +82,8 @@ type ContractFilter = {
     shouldIncludeContractCreation?: boolean,    // default is true
     shouldIncludeFailedTransactions?: boolean,  // default false
     selectors?: Set<string>,                    // default includes everything
-    functions?: Set<string>
+    functions?: Set<string>,
+    abi?: string | ABIFunction[]
 };
 
 export async function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{[address: string]: Transaction[]}>
@@ -123,31 +124,44 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
 
             if (functionsToLookUp.size > 0)
             {
-                let addressForABI = contract.address;
-
+                if (contract.abi)
                 {
-                    const responseStr = await get(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contract.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
-                    const response: RPCResponse = JSON.parse(responseStr);
-                    
-                    if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000")
+                    if (typeof(contract.abi) === "string")
                     {
-                        console.log(contract.address, "is a proxy");
-
-                        // the result will be zero padded, addresses are 20 bytes,
-                        // so we want to chop off 12 bytes (24 characters) + 2 for
-                        // the 0x prefix
-                        addressForABI = "0x" + response.result.substring(26);
-                    }
-                    else
-                    {
-                        console.log(contract.address, "is not a proxy");
+                        contract.abi = JSON.parse(contract.abi);
                     }
                 }
+                else
+                {
+                    // no ABI, attempt to look it up on etherscan
+                    let addressForABI = contract.address;
 
-                // TODO detect if etherscan doesn't have the ABI and return a useful error
-                const responseStr = await get(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
-                const response: Response<string> = JSON.parse(responseStr);
-                const abi: ABIFunction[] = JSON.parse(response.result);
+                    {
+                        const responseStr = await get(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contract.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
+                        const response: RPCResponse = JSON.parse(responseStr);
+                        
+                        if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000")
+                        {
+                            console.log(contract.address, "is a proxy");
+
+                            // the result will be zero padded, addresses are 20 bytes,
+                            // so we want to chop off 12 bytes (24 characters) + 2 for
+                            // the 0x prefix
+                            addressForABI = "0x" + response.result.substring(26);
+                        }
+                        else
+                        {
+                            console.log(contract.address, "is not a proxy");
+                        }
+                    }
+
+                    // TODO detect if etherscan doesn't have the ABI and return a useful error
+                    const responseStr = await get(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
+                    const response: Response<string> = JSON.parse(responseStr);
+                    contract.abi = JSON.parse(response.result);
+                }
+                
+                const abi = contract.abi as ABIFunction[];
                 for (let i = 0; i < abi.length; ++i)
                 {
                     if (abi[i].type == "function" && functionsToLookUp.has(abi[i].name))
