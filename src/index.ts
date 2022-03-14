@@ -14,6 +14,7 @@ type RPCResponse = {
 };
 
 type RawTransaction = {
+    blockNumber: number,
     input: string,
     gasUsed: string,
     isError: string
@@ -62,17 +63,38 @@ async function get(url: string): Promise<string>
 
 export async function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>
 {
-    // TODO paging 
-    const responseStr = await get(`https://api.etherscan.io/api?module=account&action=txlist&address=${address}&sort=asc&apikey=${apiKey}`);
-    const response: Response<RawTransaction[]> = JSON.parse(responseStr);
-    const transactions: Transaction[] = response.result.map((transaction: RawTransaction) => {
-        return {
-            input: transaction.input,
-            gasUsed: parseInt(transaction.gasUsed),
-            isError: transaction.isError == "1",
-            selector: transaction.input.substring(2, 10).toLowerCase()
-        };
-    });
+    let transactions: Transaction[] = [];
+
+    let startBlock = 0;
+    while (true)
+    {
+        const responseStr = await get(`https://api.etherscan.io/api?module=account&action=txlist&address=${address}&sort=asc&startBlock=${startBlock}&apikey=${apiKey}`);
+        const response: Response<RawTransaction[]> = JSON.parse(responseStr);
+        const page: Transaction[] = response.result.map((transaction: RawTransaction) => {
+            return {
+                input: transaction.input,
+                gasUsed: parseInt(transaction.gasUsed),
+                isError: transaction.isError == "1",
+                selector: transaction.input.substring(2, 10).toLowerCase()
+            };
+        })
+
+        transactions = transactions.concat(page);
+
+        if (page.length < 10000)
+        {
+            break;
+        }
+
+        startBlock = response.result[response.result.length - 1].blockNumber;
+
+        // TODO explain this - also move it to before doing the map etc
+        while (response.result[response.result.length - 1].blockNumber == startBlock)
+        {
+            response.result.pop();
+            transactions.pop();
+        }
+    }
     
     return transactions;
 }
@@ -190,7 +212,6 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
             }
         }
 
-        // TODO if it's only wanting contract creation could optimise the etherscan call
         let filteredTransactions = [];
         let transactions = await getTransactionsForAddress(apiKey, contract.address);
 
