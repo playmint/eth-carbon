@@ -32,7 +32,7 @@ type ABIField = {
     components?: ABIField[]
 };
 
-type ABIFunction = {
+export type ABIFunction = {
     type: "function" | "constructor" | "receive" | "fallback",
     name: string,
     inputs: ABIField[],
@@ -83,7 +83,7 @@ type ContractFilter = {
     shouldIncludeFailedTransactions?: boolean,  // default false
     selectors?: Set<string>,                    // default includes everything
     functions?: Set<string>,
-    abi?: string | ABIFunction[]
+    abi?: string | readonly ABIFunction[]
 };
 
 export async function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{[address: string]: Transaction[]}>

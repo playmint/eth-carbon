@@ -9,7 +9,7 @@ declare type ABIField = {
     type: string;
     components?: ABIField[];
 };
-declare type ABIFunction = {
+export declare type ABIFunction = {
     type: "function" | "constructor" | "receive" | "fallback";
     name: string;
     inputs: ABIField[];
@@ -23,7 +23,7 @@ declare type ContractFilter = {
     shouldIncludeFailedTransactions?: boolean;
     selectors?: Set<string>;
     functions?: Set<string>;
-    abi?: string | ABIFunction[];
+    abi?: string | readonly ABIFunction[];
 };
 export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
     [address: string]: Transaction[];
