@@ -1,8 +1,8 @@
-import {getTransactionsForContracts} from "./index"
+import {estimateCO2} from "./index"
 
 async function main()
 {
-    const transactions = await getTransactionsForContracts(
+    await estimateCO2(
         "MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T", [
             // dungeon - everything
             {address: "0x938034c188C7671cAbDb80D19cd31b71439516a9"},
@@ -15,7 +15,7 @@ async function main()
             {address: "0xf5C9100859005FabC9E4Ed884bcB7c8B7e15a898"}
         ]);
     
-    let totalGas = 0;
+    /*let totalGas = 0;
     for (const address in transactions)
     {
         for (let i = 0; i < transactions[address].length; ++i)
@@ -24,7 +24,7 @@ async function main()
         }
     }
 
-    console.log(totalGas);
+    console.log(totalGas);*/
 }
 
 main().catch((e) =>

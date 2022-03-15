@@ -1,5 +1,6 @@
 declare type Transaction = {
     blockNumber: number;
+    timeStamp: number;
     input: string;
     gasUsed: number;
     isError: boolean;
@@ -17,7 +18,6 @@ export declare type ABIFunction = {
     outputs?: ABIField[];
     stateMutability: "pure" | "view" | "payable" | "nonpayable";
 };
-export declare function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>;
 declare type ContractFilter = {
     address: string;
     shouldIncludeContractCreation?: boolean;
@@ -29,5 +29,6 @@ declare type ContractFilter = {
 export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
     [address: string]: Transaction[];
 }>;
+export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<void>;
 export {};
 //# sourceMappingURL=index.d.ts.map

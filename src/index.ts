@@ -1,5 +1,6 @@
 import * as https from "https";
 import keccak256 from "keccak256";
+import internal from "stream";
 
 type Response<Type> = {
     status: string,
@@ -14,7 +15,8 @@ type RPCResponse = {
 };
 
 type RawTransaction = {
-    blockNumber: number,
+    blockNumber: string,
+    timeStamp: string,
     input: string,
     gasUsed: string,
     isError: string
@@ -22,6 +24,7 @@ type RawTransaction = {
 
 type Transaction = {
     blockNumber: number,
+    timeStamp: number,
     input: string,
     gasUsed: number,
     isError: boolean,
@@ -42,7 +45,7 @@ export type ABIFunction = {
     stateMutability: "pure" | "view" | "payable" | "nonpayable"
 };
 
-async function get(url: string): Promise<string>
+async function httpsGet(url: string): Promise<string>
 {
     return new Promise((resolve, reject) => {
         https.get(url, (response) => {
@@ -62,18 +65,19 @@ async function get(url: string): Promise<string>
     });
 }
 
-export async function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>
+async function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]>
 {
     let transactions: Transaction[] = [];
 
     let startBlock = 0;
     while (true)
     {
-        const responseStr = await get(`https://api.etherscan.io/api?module=account&action=txlist&address=${address}&sort=asc&startBlock=${startBlock}&apikey=${apiKey}`);
+        const responseStr = await httpsGet(`https://api.etherscan.io/api?module=account&action=txlist&address=${address}&sort=asc&startBlock=${startBlock}&apikey=${apiKey}`);
         const response: Response<RawTransaction[]> = JSON.parse(responseStr);
         const page: Transaction[] = response.result.map((transaction: RawTransaction) => {
             return {
-                blockNumber: transaction.blockNumber,
+                blockNumber: parseInt(transaction.blockNumber),
+                timeStamp: parseInt(transaction.timeStamp),
                 input: transaction.input,
                 gasUsed: parseInt(transaction.gasUsed),
                 isError: transaction.isError == "1",
@@ -167,7 +171,7 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
                     let addressForABI = contract.address;
 
                     {
-                        const responseStr = await get(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contract.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
+                        const responseStr = await httpsGet(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contract.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
                         const response: RPCResponse = JSON.parse(responseStr);
                         
                         if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000")
@@ -179,7 +183,7 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
                         }
                     }
 
-                    const responseStr = await get(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
+                    const responseStr = await httpsGet(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
                     const response: Response<string> = JSON.parse(responseStr);
                     if (response.status != "1")
                     {
@@ -244,4 +248,87 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
     }
     
     return result;
+}
+
+type GasUsedRow = {
+    date: Date,
+    timeStamp: number,
+    value: number
+};
+
+type EmissionsRow = {
+
+}
+
+export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<void>
+{
+    // TODO attribution required
+    const networkGasUsed: GasUsedRow[] = (await httpsGet("https://etherscan.io/chart/gasused?output=csv"))
+        .split("\n")    // split into rows
+        .slice(1)       // remove first row, this just contains the column headers
+        .map((row) => { // parse rows
+            // all values are in quotes, they'll mess up int parsing if we leave 
+            // them in
+            const rowSplit = row.replace(/"/g, "").split(",");
+            return {
+                date: new Date(rowSplit[0]), 
+                timeStamp: parseInt(rowSplit[1]), 
+                value: parseInt(rowSplit[2])
+            };
+        }); 
+
+    const networkEmissions: EmissionsRow[] = (await httpsGet("https://kylemcdonald.github.io/ethereum-emissions/output/daily-ktco2.csv"))
+        .split("\n")
+        .slice(1)
+        .map((row) => {
+            const rowSplit = row.split(",");
+            return {
+                date: new Date(rowSplit[0]),
+                lower: parseInt(rowSplit[1]),
+                best: parseInt(rowSplit[2]),
+                upper: parseInt(rowSplit[3])
+            };
+        });
+
+    // timestamps are in seconds, so if we divide by the number of seconds in
+    // in the day we can get a number to represent the day. so if we want to
+    // look up the row in gasUsed/emissions, to get its index in those arrays
+    // we subtract the day of the first row in the array.
+    const secondsPerDay = 60 * 60 * 24;
+    const dayToIndexOffset = Math.floor(networkGasUsed[0].timeStamp / secondsPerDay);
+
+    const transactions = await getTransactionsForContracts(apiKey, contracts);
+    let gasUsedPerDay = new Map<number, number>();
+    for (const contractAddress in transactions)
+    {
+        for (let i = 0; i < transactions[contractAddress].length; ++i)
+        {
+            const day = Math.floor(transactions[contractAddress][i].timeStamp / secondsPerDay);
+            let rowIndex = day - dayToIndexOffset;
+            if (rowIndex < 0 || rowIndex >= networkGasUsed.length)
+            {
+                console.log("row index will be clamped", rowIndex);
+                rowIndex = clamp(0, networkGasUsed.length - 1, rowIndex);
+            }
+
+            let current = gasUsedPerDay.get(rowIndex);
+            if (!current)
+            {
+                current = 0;
+            }
+            
+            gasUsedPerDay.set(rowIndex, current + transactions[contractAddress][i].gasUsed);
+        }
+    }
+    
+    gasUsedPerDay.forEach((value, key) => {
+        value * networkGasUsed[key]
+    });
+
+    console.log(transactions, networkEmissions, networkGasUsed);
+}
+
+function clamp(min: number, max: number, value: number): number
+{
+    return Math.max(Math.min(value, max), min);
 }
