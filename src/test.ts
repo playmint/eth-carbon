@@ -4,7 +4,6 @@ async function main()
 {
     const transactions = await getTransactionsForContracts(
         "MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T", [
-            {address: "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb"},
             // dungeon - everything
             {address: "0x938034c188C7671cAbDb80D19cd31b71439516a9"},
             // relic - only creation/init/addWhitelistedMinter

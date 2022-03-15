@@ -21,6 +21,7 @@ type RawTransaction = {
 };
 
 type Transaction = {
+    blockNumber: number,
     input: string,
     gasUsed: number,
     isError: boolean,
@@ -72,6 +73,7 @@ export async function getTransactionsForAddress(apiKey: string, address: string)
         const response: Response<RawTransaction[]> = JSON.parse(responseStr);
         const page: Transaction[] = response.result.map((transaction: RawTransaction) => {
             return {
+                blockNumber: transaction.blockNumber,
                 input: transaction.input,
                 gasUsed: parseInt(transaction.gasUsed),
                 isError: transaction.isError == "1",
@@ -86,12 +88,18 @@ export async function getTransactionsForAddress(apiKey: string, address: string)
             break;
         }
 
-        startBlock = response.result[response.result.length - 1].blockNumber;
+        // if we got a full page, then there's probably more transactions than
+        // this, so use the block number of the last transaction as the
+        // starting block to request the next batch of transactions.
+        startBlock = transactions[transactions.length - 1].blockNumber;
 
-        // TODO explain this - also move it to before doing the map etc
-        while (response.result[response.result.length - 1].blockNumber == startBlock)
+        // we can't set start block to the block number of the last tx + 1, as
+        // it's possible there are multiple transactions in the same block. So
+        // what we do instead is remove all the transactions from the end of the
+        // array which have that same block number, as the next request to 
+        // re-fetch them and we don't want duplicates.
+        while (transactions[transactions.length - 1].blockNumber == startBlock)
         {
-            response.result.pop();
             transactions.pop();
         }
     }
@@ -164,22 +172,19 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
                         
                         if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000")
                         {
-                            console.log(contract.address, "is a proxy");
-
                             // the result will be zero padded, addresses are 20 bytes,
                             // so we want to chop off 12 bytes (24 characters) + 2 for
                             // the 0x prefix
                             addressForABI = "0x" + response.result.substring(26);
                         }
-                        else
-                        {
-                            console.log(contract.address, "is not a proxy");
-                        }
                     }
 
-                    // TODO detect if etherscan doesn't have the ABI and return a useful error
                     const responseStr = await get(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
                     const response: Response<string> = JSON.parse(responseStr);
+                    if (response.status != "1")
+                    {
+                        throw `${contract.address}: failed to get ABI from etherscan`;
+                    }
                     contract.abi = JSON.parse(response.result);
                 }
                 

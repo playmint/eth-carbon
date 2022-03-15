@@ -1,4 +1,5 @@
 declare type Transaction = {
+    blockNumber: number;
     input: string;
     gasUsed: number;
     isError: boolean;
