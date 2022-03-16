@@ -29,6 +29,15 @@ declare type ContractFilter = {
 export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
     [address: string]: Transaction[];
 }>;
-export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<void>;
+export declare type EmissionsEstimate = {
+    lower: number;
+    best: number;
+    upper: number;
+};
+export declare type EmissionsReport = {
+    dailyEmissions: Map<Date, EmissionsEstimate>;
+    total: EmissionsEstimate;
+};
+export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>;
 export {};
 //# sourceMappingURL=index.d.ts.map

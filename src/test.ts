@@ -2,7 +2,7 @@ import {estimateCO2} from "./index"
 
 async function main()
 {
-    await estimateCO2(
+    const report = await estimateCO2(
         "MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T", [
             // dungeon - everything
             {address: "0x938034c188C7671cAbDb80D19cd31b71439516a9"},
@@ -15,16 +15,10 @@ async function main()
             {address: "0xf5C9100859005FabC9E4Ed884bcB7c8B7e15a898"}
         ]);
     
-    /*let totalGas = 0;
-    for (const address in transactions)
-    {
-        for (let i = 0; i < transactions[address].length; ++i)
-        {
-            totalGas += transactions[address][i].gasUsed;
-        }
-    }
-
-    console.log(totalGas);*/
+    report.dailyEmissions.forEach((value, key) => {
+        console.log(`${key}| lower:${value.lower}, best:${value.best}, upper:${value.upper}`);
+    });
+    console.log(`TOTAL| lower:${report.total.lower}, best:${report.total.best}, upper:${report.total.upper}`);
 }
 
 main().catch((e) =>

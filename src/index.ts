@@ -1,6 +1,5 @@
 import * as https from "https";
 import keccak256 from "keccak256";
-import internal from "stream";
 
 type Response<Type> = {
     status: string,
@@ -257,10 +256,24 @@ type GasUsedRow = {
 };
 
 type EmissionsRow = {
+    date: Date,
+    lower: number,
+    best: number,
+    upper: number
+};
 
+export type EmissionsEstimate = {
+    lower: number,
+    best: number,
+    upper: number
+};
+
+export type EmissionsReport = {
+    dailyEmissions: Map<Date, EmissionsEstimate>,
+    total: EmissionsEstimate
 }
 
-export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<void>
+export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>
 {
     // TODO attribution required
     const networkGasUsed: GasUsedRow[] = (await httpsGet("https://etherscan.io/chart/gasused?output=csv"))
@@ -284,9 +297,9 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
             const rowSplit = row.split(",");
             return {
                 date: new Date(rowSplit[0]),
-                lower: parseInt(rowSplit[1]),
-                best: parseInt(rowSplit[2]),
-                upper: parseInt(rowSplit[3])
+                lower: parseInt(rowSplit[1]) * 1000, // convert from kt -> t
+                best: parseInt(rowSplit[2]) * 1000,
+                upper: parseInt(rowSplit[3]) * 1000
             };
         });
 
@@ -296,6 +309,16 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
     // we subtract the day of the first row in the array.
     const secondsPerDay = 60 * 60 * 24;
     const dayToIndexOffset = Math.floor(networkGasUsed[0].timeStamp / secondsPerDay);
+
+    // for the dayToIndexOffset to work for both networkEmissions and networkGasUsed
+    // arrays, their first entry must be the same date. In testing this seems to
+    // be the case, but worth a sanity check
+    if (networkGasUsed[0].date.getFullYear() != networkEmissions[0].date.getFullYear() ||
+        networkGasUsed[0].date.getMonth() != networkEmissions[0].date.getMonth() ||
+        networkGasUsed[0].date.getDate() != networkEmissions[0].date.getDate())
+    {
+        throw "date of first row of network gas used and network emissions csvs don't match";
+    }
 
     const transactions = await getTransactionsForContracts(apiKey, contracts);
     let gasUsedPerDay = new Map<number, number>();
@@ -321,11 +344,35 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         }
     }
     
+    let report: EmissionsReport = {
+        dailyEmissions: new Map<Date, EmissionsEstimate>(),
+        total: {
+            lower: 0,
+            best: 0,
+            upper: 0
+        }
+    };
+
     gasUsedPerDay.forEach((value, key) => {
-        value * networkGasUsed[key]
+        // emissions array should be the same length as networkGasUsed, but just
+        // to be sure
+        const emissionsRow = Math.min(key, networkEmissions.length - 1);
+        const lower = (value * networkEmissions[emissionsRow].lower) / networkGasUsed[key].value;
+        const best = (value * networkEmissions[emissionsRow].best) / networkGasUsed[key].value;
+        const upper = (value * networkEmissions[emissionsRow].upper) / networkGasUsed[key].value;
+
+        report.dailyEmissions.set(networkGasUsed[key].date, {
+            lower: lower,
+            best: best,
+            upper: upper
+        });
+
+        report.total.lower += lower;
+        report.total.best += best;
+        report.total.upper += upper;
     });
 
-    console.log(transactions, networkEmissions, networkGasUsed);
+    return report;
 }
 
 function clamp(min: number, max: number, value: number): number
