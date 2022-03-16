@@ -21,7 +21,7 @@ type RawTransaction = {
     isError: string
 };
 
-type Transaction = {
+export type Transaction = {
     blockNumber: number,
     timeStamp: number,
     input: string,
@@ -30,7 +30,7 @@ type Transaction = {
     selector: string
 };
 
-type ABIField = {
+export type ABIField = {
     name: string,
     type: string,
     components?: ABIField[]
@@ -110,7 +110,7 @@ async function getTransactionsForAddress(apiKey: string, address: string): Promi
     return transactions;
 }
 
-type ContractFilter = {
+export type ContractFilter = {
     address: string,
     shouldIncludeContractCreation?: boolean,    // default is true
     shouldIncludeFailedTransactions?: boolean,  // default false
@@ -275,7 +275,6 @@ export type EmissionsReport = {
 
 export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>
 {
-    // TODO attribution required
     const networkGasUsed: GasUsedRow[] = (await httpsGet("https://etherscan.io/chart/gasused?output=csv"))
         .split("\n")    // split into rows
         .slice(1)       // remove first row, this just contains the column headers

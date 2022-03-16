@@ -1,4 +1,4 @@
-declare type Transaction = {
+export declare type Transaction = {
     blockNumber: number;
     timeStamp: number;
     input: string;
@@ -6,7 +6,7 @@ declare type Transaction = {
     isError: boolean;
     selector: string;
 };
-declare type ABIField = {
+export declare type ABIField = {
     name: string;
     type: string;
     components?: ABIField[];
@@ -18,7 +18,7 @@ export declare type ABIFunction = {
     outputs?: ABIField[];
     stateMutability: "pure" | "view" | "payable" | "nonpayable";
 };
-declare type ContractFilter = {
+export declare type ContractFilter = {
     address: string;
     shouldIncludeContractCreation?: boolean;
     shouldIncludeFailedTransactions?: boolean;
@@ -39,5 +39,4 @@ export declare type EmissionsReport = {
     total: EmissionsEstimate;
 };
 export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>;
-export {};
 //# sourceMappingURL=index.d.ts.map
