@@ -233,14 +233,23 @@ type EmissionsRow = {
 };
 
 export type EmissionsEstimate = {
+    gas: number;
     lower: number;
     best: number;
     upper: number;
 };
 
-export type EmissionsReport = {
-    dailyEmissions: Map<Date, EmissionsEstimate>;
-    total: EmissionsEstimate;
+export type EmissionsReport2 = {
+    total: any;
+    byAddress: {
+        total: EmissionsEstimate;
+        byDate: Map<Date, {
+            total: EmissionsEstimate;
+            bySelector: { [selector: string]: EmissionsEstimate };
+        }>;
+        bySelector: { [selector: string]: EmissionsEstimate };
+    };
+    byDate: Map<Date, EmissionsEstimate>;
 }
 
 export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport> {
@@ -288,33 +297,35 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
     }
 
     const transactions = await getTransactionsForContracts(apiKey, contracts);
-    let gasUsedPerDay = new Map<number, number>();
+
+    let report: EmissionsReport = {
+        byAddress: {}
+    };
+
     for (const contractAddress in transactions) {
+        const byDay = new Map<Date, EmissionsEstimate>();
         for (let i = 0; i < transactions[contractAddress].length; ++i) {
             const day = Math.floor(transactions[contractAddress][i].timeStamp / secondsPerDay);
             let rowIndex = day - dayToIndexOffset;
             if (rowIndex < 0 || rowIndex >= networkGasUsed.length) {
-                console.log("row index will be clamped", rowIndex);
                 rowIndex = clamp(0, networkGasUsed.length - 1, rowIndex);
             }
 
-            let current = gasUsedPerDay.get(rowIndex);
+            const date = networkGasUsed[rowIndex].date;
+
+            let current = byDay.get(date);
             if (!current) {
-                current = 0;
+                current = {
+                    gas: 0,
+                    lower: 0,
+                    best: 0,
+                    upper: 0
+                };
             }
 
-            gasUsedPerDay.set(rowIndex, current + transactions[contractAddress][i].gasUsed);
+            current.gas += transactions[contractAddress][i].gasUsed;
         }
     }
-
-    let report: EmissionsReport = {
-        dailyEmissions: new Map<Date, EmissionsEstimate>(),
-        total: {
-            lower: 0,
-            best: 0,
-            upper: 0
-        }
-    };
 
     gasUsedPerDay.forEach((value, key) => {
         // emissions array should be the same length as networkGasUsed, but just
