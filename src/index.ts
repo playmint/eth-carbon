@@ -244,19 +244,19 @@ export type EmissionsEstimate = {
 
 export type EmissionsReport = {
     total: EmissionsEstimate;
-    byAddress: Map<string, EmissionsReportForAddress>;
+    byAddress: { [address: string]: EmissionsReportForAddress };
     byDate: Map<Date, EmissionsEstimate>;
 }
 
 export type EmissionsReportForAddress = {
     total: EmissionsEstimate;
     byDate: Map<Date, EmissionsReportForAddressAndDate>;
-    bySelector: Map<string, EmissionsEstimate>;
+    bySelector: { [selector: string]: EmissionsEstimate };
 }
 
 export type EmissionsReportForAddressAndDate = {
     total: EmissionsEstimate;
-    bySelector: Map<string, EmissionsEstimate>;
+    bySelector: { [selector: string]: EmissionsEstimate };
 }
 
 export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport> {
@@ -281,7 +281,7 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
 
     const report: EmissionsReport = {
         total: { gas: 0n, lower: 0, best: 0, upper: 0 },
-        byAddress: new Map<string, EmissionsReportForAddress>(),
+        byAddress: {},
         byDate: new Map<Date, EmissionsEstimate>()
     };
 
@@ -289,9 +289,9 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         const byAddress = {
             total: { gas: 0n, lower: 0, best: 0, upper: 0 },
             byDate: new Map<Date, EmissionsReportForAddressAndDate>(),
-            bySelector: new Map<string, EmissionsEstimate>()
+            bySelector: {}
         };
-        report.byAddress.set(contractAddress, byAddress);
+        report.byAddress[contractAddress] = byAddress;
 
         for (let i = 0; i < transactions[contractAddress].length; ++i) {
             const transaction = transactions[contractAddress][i];
@@ -303,15 +303,15 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
             if (!byAddress.byDate.has(date)) {
                 byAddress.byDate.set(date, {
                     total: { gas: 0n, lower: 0, best: 0, upper: 0 },
-                    bySelector: new Map<string, EmissionsEstimate>()
+                    bySelector: {}
                 });
             }
             const byAddressAndDate = byAddress.byDate.get(date)!;
 
-            if (!byAddressAndDate.bySelector.has(transaction.selector)) {
-                byAddressAndDate.bySelector.set(transaction.selector, { gas: 0n, lower: 0, best: 0, upper: 0 });
+            if (byAddressAndDate.bySelector[transaction.selector] === undefined) {
+                byAddressAndDate.bySelector[transaction.selector] = { gas: 0n, lower: 0, best: 0, upper: 0 };
             }
-            const byAddressAndDateAndSelector = byAddressAndDate.bySelector.get(transaction.selector)!;
+            const byAddressAndDateAndSelector = byAddressAndDate.bySelector[transaction.selector];
 
             if (!report.byDate.has(date)) {
                 report.byDate.set(date, { gas: 0n, lower: 0, best: 0, upper: 0 });
@@ -348,7 +348,8 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         report.total.upper += byDate.upper;
 
         // calculate missions which are broken up per address/selector
-        report.byAddress.forEach((byAddress: EmissionsReportForAddress, address: string) => {
+        for (const address in report.byAddress) {
+            const byAddress = report.byAddress[address];
             if (byAddress.byDate.has(date)) {
                 const byAddressAndDate = byAddress.byDate.get(date)!;
 
@@ -361,21 +362,23 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
                 byAddress.total.best += byAddressAndDate.total.best;
                 byAddress.total.upper += byAddressAndDate.total.upper;
 
-                byAddressAndDate.bySelector.forEach((byAddressAndDateAndSelector: EmissionsEstimate, selector: string) => {
+                for (const selector in byAddressAndDate.bySelector) {
+                    const byAddressAndDateAndSelector = byAddressAndDate.bySelector[selector];
                     // calculate for address, date & selector
                     calculateEmissionsEstimate(byAddressAndDateAndSelector, emissionsRow, networkGasUsedNum);
 
                     // update selector total
-                    if (!byAddress.bySelector.has(selector)) {
-                        byAddress.bySelector.set(selector, { gas: 0n, lower: 0, best: 0, upper: 0 });
+                    if (byAddress.bySelector[selector] === undefined) {
+                        byAddress.bySelector[selector] = { gas: 0n, lower: 0, best: 0, upper: 0 };
                     }
-                    const byAddressAndSelector = byAddress.bySelector.get(selector)!;
+                    const byAddressAndSelector = byAddress.bySelector[selector];
+                    byAddressAndSelector.gas += byAddressAndDateAndSelector.gas;
                     byAddressAndSelector.lower += byAddressAndDateAndSelector.lower;
                     byAddressAndSelector.best += byAddressAndDateAndSelector.best;
                     byAddressAndSelector.upper += byAddressAndDateAndSelector.upper;
-                });
+                };
             }
-        });
+        };
     });
 
     return report;

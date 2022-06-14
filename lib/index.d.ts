@@ -38,17 +38,23 @@ export declare type EmissionsEstimate = {
 };
 export declare type EmissionsReport = {
     total: EmissionsEstimate;
-    byAddress: Map<string, EmissionsReportForAddress>;
+    byAddress: {
+        [address: string]: EmissionsReportForAddress;
+    };
     byDate: Map<Date, EmissionsEstimate>;
 };
 export declare type EmissionsReportForAddress = {
     total: EmissionsEstimate;
     byDate: Map<Date, EmissionsReportForAddressAndDate>;
-    bySelector: Map<string, EmissionsEstimate>;
+    bySelector: {
+        [selector: string]: EmissionsEstimate;
+    };
 };
 export declare type EmissionsReportForAddressAndDate = {
     total: EmissionsEstimate;
-    bySelector: Map<string, EmissionsEstimate>;
+    bySelector: {
+        [selector: string]: EmissionsEstimate;
+    };
 };
 export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>;
 //# sourceMappingURL=index.d.ts.map
