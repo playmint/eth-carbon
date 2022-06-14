@@ -25,7 +25,7 @@ export type Transaction = {
     blockNumber: number;
     timeStamp: number;
     input: string;
-    gasUsed: number;
+    gasUsed: bigint;
     isError: boolean;
     selector: string;
 };
@@ -74,7 +74,7 @@ async function getTransactionsForAddress(apiKey: string, address: string): Promi
                 blockNumber: parseInt(transaction.blockNumber),
                 timeStamp: parseInt(transaction.timeStamp),
                 input: transaction.input,
-                gasUsed: parseInt(transaction.gasUsed),
+                gasUsed: BigInt(transaction.gasUsed),
                 isError: transaction.isError == "1",
                 selector: transaction.input.substring(2, 10).toLowerCase()
             };
@@ -222,7 +222,7 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
 type GasUsedRow = {
     date: Date;
     timeStamp: number;
-    value: number;
+    value: bigint;
 };
 
 type EmissionsRow = {
@@ -233,39 +233,50 @@ type EmissionsRow = {
 };
 
 export type EmissionsEstimate = {
-    gas: number;
+    gas: bigint;
     lower: number;
     best: number;
     upper: number;
 };
 
-export type EmissionsReport2 = {
-    total: any;
-    byAddress: {
-        total: EmissionsEstimate;
-        byDate: Map<Date, {
-            total: EmissionsEstimate;
-            bySelector: { [selector: string]: EmissionsEstimate };
-        }>;
-        bySelector: { [selector: string]: EmissionsEstimate };
-    };
+export type EmissionsReport = {
+    total: EmissionsEstimate;
+    byAddress: Map<string, EmissionsReportForAddress>;
     byDate: Map<Date, EmissionsEstimate>;
 }
 
+export type EmissionsReportForAddress = {
+    total: EmissionsEstimate;
+    byDate: Map<Date, EmissionsReportForAddressAndDate>;
+    bySelector: Map<string, EmissionsEstimate>;
+}
+
+export type EmissionsReportForAddressAndDate = {
+    total: EmissionsEstimate;
+    bySelector: Map<string, EmissionsEstimate>;
+}
+
 export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport> {
-    const networkGasUsed: GasUsedRow[] = (await httpsGet("https://etherscan.io/chart/gasused?output=csv"))
-        .split("\n")    // split into rows
-        .slice(1)       // remove first row, this just contains the column headers
-        .map((row) => { // parse rows
-            // all values are in quotes, they'll mess up int parsing if we leave 
-            // them in
-            const rowSplit = row.replace(/"/g, "").split(",");
-            return {
-                date: new Date(rowSplit[0]),
-                timeStamp: parseInt(rowSplit[1]),
-                value: parseInt(rowSplit[2])
-            };
-        });
+    const csvRows = (await httpsGet("https://etherscan.io/chart/gasused?output=csv")).split("\n");
+
+    // remove first row, this just contains the column headers
+    csvRows.shift();
+
+    // remove possibly empty final row
+    if (csvRows[csvRows.length - 1] == "") {
+        csvRows.pop();
+    }
+
+    const networkGasUsed: GasUsedRow[] = csvRows.map((row) => { // parse rows
+        // all values are in quotes, they'll mess up int parsing if we leave 
+        // them in
+        const rowSplit = row.replace(/"/g, "").split(",");
+        return {
+            date: new Date(rowSplit[0]),
+            timeStamp: parseInt(rowSplit[1]),
+            value: BigInt(rowSplit[2])
+        };
+    });
 
     const networkEmissions: EmissionsRow[] = (await httpsGet("https://kylemcdonald.github.io/ethereum-emissions/output/daily-ktco2.csv"))
         .split("\n")
@@ -290,60 +301,110 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
     // for the dayToIndexOffset to work for both networkEmissions and networkGasUsed
     // arrays, their first entry must be the same date. In testing this seems to
     // be the case, but worth a sanity check
-    if (networkGasUsed[0].date.getFullYear() != networkEmissions[0].date.getFullYear() ||
-        networkGasUsed[0].date.getMonth() != networkEmissions[0].date.getMonth() ||
-        networkGasUsed[0].date.getDate() != networkEmissions[0].date.getDate()) {
+    if (!datesAreSameDay(networkGasUsed[0].date, networkEmissions[0].date)) {
         throw "date of first row of network gas used and network emissions csvs don't match";
     }
 
     const transactions = await getTransactionsForContracts(apiKey, contracts);
 
-    let report: EmissionsReport = {
-        byAddress: {}
+    const report: EmissionsReport = {
+        total: { gas: 0n, lower: 0, best: 0, upper: 0 },
+        byAddress: new Map<string, EmissionsReportForAddress>(),
+        byDate: new Map<Date, EmissionsEstimate>()
     };
 
     for (const contractAddress in transactions) {
-        const byDay = new Map<Date, EmissionsEstimate>();
-        for (let i = 0; i < transactions[contractAddress].length; ++i) {
-            const day = Math.floor(transactions[contractAddress][i].timeStamp / secondsPerDay);
-            let rowIndex = day - dayToIndexOffset;
-            if (rowIndex < 0 || rowIndex >= networkGasUsed.length) {
-                rowIndex = clamp(0, networkGasUsed.length - 1, rowIndex);
-            }
+        const byAddress = {
+            total: { gas: 0n, lower: 0, best: 0, upper: 0 },
+            byDate: new Map<Date, EmissionsReportForAddressAndDate>(),
+            bySelector: new Map<string, EmissionsEstimate>()
+        };
+        report.byAddress.set(contractAddress, byAddress);
 
+        for (let i = 0; i < transactions[contractAddress].length; ++i) {
+            const transaction = transactions[contractAddress][i];
+
+            const day = Math.floor(transaction.timeStamp / secondsPerDay);
+            const rowIndex = clamp(0, networkGasUsed.length - 1, day - dayToIndexOffset);
             const date = networkGasUsed[rowIndex].date;
 
-            let current = byDay.get(date);
-            if (!current) {
-                current = {
-                    gas: 0,
-                    lower: 0,
-                    best: 0,
-                    upper: 0
-                };
+            if (!byAddress.byDate.has(date)) {
+                byAddress.byDate.set(date, {
+                    total: { gas: 0n, lower: 0, best: 0, upper: 0 },
+                    bySelector: new Map<string, EmissionsEstimate>()
+                });
             }
+            const byAddressAndDate = byAddress.byDate.get(date)!;
 
-            current.gas += transactions[contractAddress][i].gasUsed;
+            if (!byAddressAndDate.bySelector.has(transaction.selector)) {
+                byAddressAndDate.bySelector.set(transaction.selector, { gas: 0n, lower: 0, best: 0, upper: 0 });
+            }
+            const byAddressAndDateAndSelector = byAddressAndDate.bySelector.get(transaction.selector)!;
+
+            if (!report.byDate.has(date)) {
+                report.byDate.set(date, { gas: 0n, lower: 0, best: 0, upper: 0 });
+            }
+            const byDate = report.byDate.get(date)!;
+
+            byAddressAndDate.total.gas += transaction.gasUsed;
+            byAddressAndDateAndSelector.gas += transaction.gasUsed;
+            byDate.gas += transaction.gasUsed;
         }
     }
 
-    gasUsedPerDay.forEach((value, key) => {
+    report.byDate.forEach((byDate: EmissionsEstimate, date: Date) => {
+        const gasRow = Math.floor((date.getTime() / 1000) / secondsPerDay) - dayToIndexOffset;
+
+        if (!datesAreSameDay(networkGasUsed[gasRow].date, date)) {
+            throw "date doesn't match that in networkGasUsed table";
+        }
+
+        const networkGasUsedNum = Number(networkGasUsed[gasRow].value);
+
         // emissions array should be the same length as networkGasUsed, but just
         // to be sure
-        const emissionsRow = Math.min(key, networkEmissions.length - 1);
-        const lower = (value * networkEmissions[emissionsRow].lower) / networkGasUsed[key].value;
-        const best = (value * networkEmissions[emissionsRow].best) / networkGasUsed[key].value;
-        const upper = (value * networkEmissions[emissionsRow].upper) / networkGasUsed[key].value;
+        const emissionsRowIdx = Math.min(gasRow, networkEmissions.length - 1);
+        const emissionsRow = networkEmissions[emissionsRowIdx];
 
-        report.dailyEmissions.set(networkGasUsed[key].date, {
-            lower: lower,
-            best: best,
-            upper: upper
+        // calculate emissions for day
+        // TODO check if summing the emissions per address + selector etc adds up to same number
+        calculateEmissionsEstimate(byDate, emissionsRow, networkGasUsedNum);
+
+        // add to total emissions
+        report.total.gas += byDate.gas;
+        report.total.lower += byDate.lower;
+        report.total.best += byDate.best;
+        report.total.upper += byDate.upper;
+
+        // calculate missions which are broken up per address/selector
+        report.byAddress.forEach((byAddress: EmissionsReportForAddress, address: string) => {
+            if (byAddress.byDate.has(date)) {
+                const byAddressAndDate = byAddress.byDate.get(date)!;
+
+                // calculate for address and date
+                calculateEmissionsEstimate(byAddressAndDate.total, emissionsRow, networkGasUsedNum);
+
+                // update the address total
+                byAddress.total.gas += byAddressAndDate.total.gas;
+                byAddress.total.lower += byAddressAndDate.total.lower;
+                byAddress.total.best += byAddressAndDate.total.best;
+                byAddress.total.upper += byAddressAndDate.total.upper;
+
+                byAddressAndDate.bySelector.forEach((byAddressAndDateAndSelector: EmissionsEstimate, selector: string) => {
+                    // calculate for address, date & selector
+                    calculateEmissionsEstimate(byAddressAndDateAndSelector, emissionsRow, networkGasUsedNum);
+
+                    // update selector total
+                    if (!byAddress.bySelector.has(selector)) {
+                        byAddress.bySelector.set(selector, { gas: 0n, lower: 0, best: 0, upper: 0 });
+                    }
+                    const byAddressAndSelector = byAddress.bySelector.get(selector)!;
+                    byAddressAndSelector.lower += byAddressAndDateAndSelector.lower;
+                    byAddressAndSelector.best += byAddressAndDateAndSelector.best;
+                    byAddressAndSelector.upper += byAddressAndDateAndSelector.upper;
+                });
+            }
         });
-
-        report.total.lower += lower;
-        report.total.best += best;
-        report.total.upper += upper;
     });
 
     return report;
@@ -351,4 +412,20 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
 
 function clamp(min: number, max: number, value: number): number {
     return Math.max(Math.min(value, max), min);
+}
+
+function calculateEmissionsEstimate(
+    emissions: EmissionsEstimate,
+    networkEmissions: EmissionsRow,
+    networkGasUsageForDay: number) {
+    const gasNum = Number(emissions.gas);
+    emissions.lower = (gasNum * networkEmissions.lower) / networkGasUsageForDay;
+    emissions.best = (gasNum * networkEmissions.best) / networkGasUsageForDay;
+    emissions.upper = (gasNum * networkEmissions.upper) / networkGasUsageForDay;
+}
+
+function datesAreSameDay(a: Date, b: Date): boolean {
+    return a.getFullYear() == b.getFullYear() &&
+        a.getMonth() == b.getMonth() &&
+        a.getDate() == b.getDate();
 }

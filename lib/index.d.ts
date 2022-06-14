@@ -2,7 +2,7 @@ export declare type Transaction = {
     blockNumber: number;
     timeStamp: number;
     input: string;
-    gasUsed: number;
+    gasUsed: bigint;
     isError: boolean;
     selector: string;
 };
@@ -30,13 +30,24 @@ export declare function getTransactionsForContracts(apiKey: string, contracts: C
     [address: string]: Transaction[];
 }>;
 export declare type EmissionsEstimate = {
+    gas: bigint;
     lower: number;
     best: number;
     upper: number;
 };
 export declare type EmissionsReport = {
-    dailyEmissions: Map<Date, EmissionsEstimate>;
     total: EmissionsEstimate;
+    byAddress: Map<string, EmissionsReportForAddress>;
+    byDate: Map<Date, EmissionsEstimate>;
+};
+export declare type EmissionsReportForAddress = {
+    total: EmissionsEstimate;
+    byDate: Map<Date, EmissionsReportForAddressAndDate>;
+    bySelector: Map<string, EmissionsEstimate>;
+};
+export declare type EmissionsReportForAddressAndDate = {
+    total: EmissionsEstimate;
+    bySelector: Map<string, EmissionsEstimate>;
 };
 export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>;
 //# sourceMappingURL=index.d.ts.map
