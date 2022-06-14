@@ -127,75 +127,7 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
             contract.shouldIncludeContractCreation = true;
         }
 
-        if (contract.functions) {
-            if (!contract.selectors) {
-                contract.selectors = new Set<string>();
-            }
-
-            let functionsToLookUp = new Map<string, ABIFunction | undefined>();
-            contract.functions.forEach((func) => {
-                // if any function sigs are just the name, then we'll need to look
-                // the contract up on etherscan
-                if (func.indexOf("(") == -1) {
-                    functionsToLookUp.set(func, undefined); // we'll fill in the function later when we find it
-                }
-                else {
-                    contract.selectors!.add(keccak256(func.replace(/ /g, "")).toString("hex").substring(0, 8));
-                }
-            });
-
-            if (functionsToLookUp.size > 0) {
-                if (contract.abi) {
-                    if (typeof (contract.abi) === "string") {
-                        contract.abi = JSON.parse(contract.abi);
-                    }
-                }
-                else {
-                    // no ABI, attempt to look it up on etherscan
-                    let addressForABI = contract.address;
-
-                    {
-                        const responseStr = await httpsGet(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contract.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
-                        const response: RPCResponse = JSON.parse(responseStr);
-
-                        if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000") {
-                            // the result will be zero padded, addresses are 20 bytes,
-                            // so we want to chop off 12 bytes (24 characters) + 2 for
-                            // the 0x prefix
-                            addressForABI = "0x" + response.result.substring(26);
-                        }
-                    }
-
-                    const responseStr = await httpsGet(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
-                    const response: Response<string> = JSON.parse(responseStr);
-                    if (response.status != "1") {
-                        throw `${contract.address}: failed to get ABI from etherscan`;
-                    }
-                    contract.abi = JSON.parse(response.result);
-                }
-
-                const abi = contract.abi as ABIFunction[];
-                for (let i = 0; i < abi.length; ++i) {
-                    if (abi[i].type == "function" && functionsToLookUp.has(abi[i].name)) {
-                        if (functionsToLookUp.get(abi[i].name) == undefined) {
-                            functionsToLookUp.set(abi[i].name, abi[i]);
-
-                            let sig = `${abi[i].name}(${abi[i].inputs.map((value) => value.type).join(",")})`;
-                            contract.selectors!.add(keccak256(sig).toString("hex").substring(0, 8));
-                        }
-                        else {
-                            throw `${contract.address}: multiple functions found with name '${abi[i].name}'`;
-                        }
-                    }
-                }
-
-                functionsToLookUp.forEach((value, key) => {
-                    if (value == undefined) {
-                        throw `${contract.address}: no function found with name '${key}'`;
-                    }
-                });
-            }
-        }
+        await populateSelectorsForContractFilter(apiKey, contract);
 
         let filteredTransactions = [];
         let transactions = await getTransactionsForAddress(apiKey, contract.address);
@@ -220,6 +152,78 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
     }
 
     return result;
+}
+
+export async function populateSelectorsForContractFilter(apiKey: string, contractFilter: ContractFilter) {
+    if (contractFilter.functions) {
+        if (!contractFilter.selectors) {
+            contractFilter.selectors = new Set<string>();
+        }
+
+        let functionsToLookUp = new Map<string, ABIFunction | undefined>();
+        contractFilter.functions.forEach((func) => {
+            // if any function sigs are just the name, then we'll need to look
+            // the contract up on etherscan
+            if (func.indexOf("(") == -1) {
+                functionsToLookUp.set(func, undefined); // we'll fill in the function later when we find it
+            }
+            else {
+                contractFilter.selectors!.add(keccak256(func.replace(/ /g, "")).toString("hex").substring(0, 8));
+            }
+        });
+
+        if (functionsToLookUp.size > 0) {
+            if (contractFilter.abi) {
+                if (typeof (contractFilter.abi) === "string") {
+                    contractFilter.abi = JSON.parse(contractFilter.abi);
+                }
+            }
+            else {
+                // no ABI, attempt to look it up on etherscan
+                let addressForABI = contractFilter.address;
+
+                {
+                    const responseStr = await httpsGet(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contractFilter.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
+                    const response: RPCResponse = JSON.parse(responseStr);
+
+                    if (response.result != "0x0000000000000000000000000000000000000000000000000000000000000000") {
+                        // the result will be zero padded, addresses are 20 bytes,
+                        // so we want to chop off 12 bytes (24 characters) + 2 for
+                        // the 0x prefix
+                        addressForABI = "0x" + response.result.substring(26);
+                    }
+                }
+
+                const responseStr = await httpsGet(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
+                const response: Response<string> = JSON.parse(responseStr);
+                if (response.status != "1") {
+                    throw `${contractFilter.address}: failed to get ABI from etherscan`;
+                }
+                contractFilter.abi = JSON.parse(response.result);
+            }
+
+            const abi = contractFilter.abi as ABIFunction[];
+            for (let i = 0; i < abi.length; ++i) {
+                if (abi[i].type == "function" && functionsToLookUp.has(abi[i].name)) {
+                    if (functionsToLookUp.get(abi[i].name) == undefined) {
+                        functionsToLookUp.set(abi[i].name, abi[i]);
+
+                        let sig = `${abi[i].name}(${abi[i].inputs.map((value) => value.type).join(",")})`;
+                        contractFilter.selectors!.add(keccak256(sig).toString("hex").substring(0, 8));
+                    }
+                    else {
+                        throw `${contractFilter.address}: multiple functions found with name '${abi[i].name}'`;
+                    }
+                }
+            }
+
+            functionsToLookUp.forEach((value, key) => {
+                if (value == undefined) {
+                    throw `${contractFilter.address}: no function found with name '${key}'`;
+                }
+            });
+        }
+    }
 }
 
 type GasUsedRow = {
@@ -380,6 +384,8 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
             }
         };
     });
+
+
 
     return report;
 }

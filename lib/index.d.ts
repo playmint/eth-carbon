@@ -30,6 +30,7 @@ export declare type ContractFilter = {
 export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
     [address: string]: Transaction[];
 }>;
+export declare function populateSelectorsForContractFilter(apiKey: string, contractFilter: ContractFilter): Promise<void>;
 export declare type EmissionsEstimate = {
     gas: bigint;
     lower: number;
