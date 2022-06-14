@@ -14,6 +14,7 @@ type RPCResponse = {
 };
 
 type RawTransaction = {
+    hash: string;
     blockNumber: string;
     timeStamp: string;
     input: string;
@@ -22,6 +23,7 @@ type RawTransaction = {
 };
 
 export type Transaction = {
+    hash: string;
     blockNumber: number;
     timeStamp: number;
     input: string;
@@ -71,6 +73,7 @@ async function getTransactionsForAddress(apiKey: string, address: string): Promi
         const response: Response<RawTransaction[]> = JSON.parse(responseStr);
         const page: Transaction[] = response.result.map((transaction: RawTransaction) => {
             return {
+                hash: transaction.hash,
                 blockNumber: parseInt(transaction.blockNumber),
                 timeStamp: parseInt(transaction.timeStamp),
                 input: transaction.input,
@@ -257,39 +260,8 @@ export type EmissionsReportForAddressAndDate = {
 }
 
 export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport> {
-    const csvRows = (await httpsGet("https://etherscan.io/chart/gasused?output=csv")).split("\n");
-
-    // remove first row, this just contains the column headers
-    csvRows.shift();
-
-    // remove possibly empty final row
-    if (csvRows[csvRows.length - 1] == "") {
-        csvRows.pop();
-    }
-
-    const networkGasUsed: GasUsedRow[] = csvRows.map((row) => { // parse rows
-        // all values are in quotes, they'll mess up int parsing if we leave 
-        // them in
-        const rowSplit = row.replace(/"/g, "").split(",");
-        return {
-            date: new Date(rowSplit[0]),
-            timeStamp: parseInt(rowSplit[1]),
-            value: BigInt(rowSplit[2])
-        };
-    });
-
-    const networkEmissions: EmissionsRow[] = (await httpsGet("https://kylemcdonald.github.io/ethereum-emissions/output/daily-ktco2.csv"))
-        .split("\n")
-        .slice(1)
-        .map((row) => {
-            const rowSplit = row.split(",");
-            return {
-                date: new Date(rowSplit[0]),
-                lower: parseInt(rowSplit[1]) * 1000, // convert from kt -> t
-                best: parseInt(rowSplit[2]) * 1000,
-                upper: parseInt(rowSplit[3]) * 1000
-            };
-        });
+    const networkGasUsed: GasUsedRow[] = await getNetworkGasUsedTable();
+    const networkEmissions: EmissionsRow[] = await getNetworkEmissionsTable();
 
     // timestamps are in seconds, so if we divide by the number of seconds in
     // in the day we can get a number to represent the day. so if we want to
@@ -367,7 +339,6 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         const emissionsRow = networkEmissions[emissionsRowIdx];
 
         // calculate emissions for day
-        // TODO check if summing the emissions per address + selector etc adds up to same number
         calculateEmissionsEstimate(byDate, emissionsRow, networkGasUsedNum);
 
         // add to total emissions
@@ -425,7 +396,52 @@ function calculateEmissionsEstimate(
 }
 
 function datesAreSameDay(a: Date, b: Date): boolean {
-    return a.getFullYear() == b.getFullYear() &&
-        a.getMonth() == b.getMonth() &&
-        a.getDate() == b.getDate();
+    return a.getUTCFullYear() == b.getUTCFullYear() &&
+        a.getUTCMonth() == b.getUTCMonth() &&
+        a.getUTCDate() == b.getUTCDate();
+}
+
+async function getNetworkGasUsedTable(): Promise<GasUsedRow[]> {
+    const csvRows = (await httpsGet("https://etherscan.io/chart/gasused?output=csv")).split("\n");
+
+    // remove first row, this just contains the column headers
+    csvRows.shift();
+
+    // remove possibly empty final row
+    if (csvRows[csvRows.length - 1] == "") {
+        csvRows.pop();
+    }
+
+    return csvRows.map((row) => { // parse rows
+        // all values are in quotes, they'll mess up int parsing if we leave 
+        // them in
+        const rowSplit = row.replace(/"/g, "").split(",");
+        return {
+            date: new Date(parseInt(rowSplit[1]) * 1000),
+            timeStamp: parseInt(rowSplit[1]),
+            value: BigInt(rowSplit[2])
+        };
+    });
+}
+
+async function getNetworkEmissionsTable(): Promise<EmissionsRow[]> {
+    const csvRows = (await httpsGet("https://kylemcdonald.github.io/ethereum-emissions/output/daily-ktco2.csv")).split("\n");
+
+    // remove first row, this just contains the column headers
+    csvRows.shift();
+
+    // remove possibly empty final row
+    if (csvRows[csvRows.length - 1] == "") {
+        csvRows.pop();
+    }
+
+    return csvRows.map((row) => {
+        const rowSplit = row.split(",");
+        return {
+            date: new Date(rowSplit[0]),
+            lower: parseInt(rowSplit[1]) * 1000, // convert from kt -> t
+            best: parseInt(rowSplit[2]) * 1000,
+            upper: parseInt(rowSplit[3]) * 1000
+        };
+    });
 }

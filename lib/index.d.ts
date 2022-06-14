@@ -1,4 +1,5 @@
 export declare type Transaction = {
+    hash: string;
     blockNumber: number;
     timeStamp: number;
     input: string;
