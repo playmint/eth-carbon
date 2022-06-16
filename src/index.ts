@@ -407,7 +407,7 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         };
     });
 
-    // de-mangle selectors for readability
+    // lookup selectors for readability
     for (const contract of contracts) {
         if (contract.selectorToFunction === undefined) {
             continue;
@@ -420,7 +420,7 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
             continue;
         }
 
-        const demangleSelectors = (emissionsForSelectors: { [selector: string]: EmissionsEstimate }) => {
+        const lookupSelectors = (emissionsForSelectors: { [selector: string]: EmissionsEstimate }) => {
             for (const selector in emissionsForSelectors) {
                 const func = contract.selectorToFunction![selector];
                 if (func !== undefined) {
@@ -429,10 +429,10 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
             }
         };
 
-        demangleSelectors(byAddress.bySelector);
+        lookupSelectors(byAddress.bySelector);
 
         byAddress.byDate.forEach((byAddressAndDate) => {
-            demangleSelectors(byAddressAndDate.bySelector);
+            lookupSelectors(byAddressAndDate.bySelector);
         });
     }
 
