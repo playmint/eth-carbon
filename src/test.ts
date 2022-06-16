@@ -1,8 +1,8 @@
-import { estimateCO2 } from "./index"
+import { estimateCO2, reportToCSV, reportToString } from "./index";
+import fs from "fs";
 
 async function main() {
-    const report = await estimateCO2(
-        "MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T", [
+    const contracts = [
         // dungeon - everything
         { address: "0x938034c188C7671cAbDb80D19cd31b71439516a9" },
         // relic - only creation/init/addWhitelistedMinter
@@ -20,18 +20,13 @@ async function main() {
         { address: "0x8D0CD328dd41C3934A2Be66578B63CffEb3E555D" },
         // dungeon3minter - everything
         { address: "0xe3c37f80077689f660Cd63BD48D81C746dF51363" }
-    ]);
+    ];
 
-    for (const address in report.byAddress) {
-        const byAddress = report.byAddress[address];
-        console.log(`${address}| gas:${byAddress.total.gas}, lower:${byAddress.total.lower}, best:${byAddress.total.best}, upper:${byAddress.total.upper}`);
-        for (const selector in byAddress.bySelector) {
-            const bySelector = byAddress.bySelector[selector];
-            console.log(`${selector}| gas:${bySelector.gas}, lower:${bySelector.lower}, best:${bySelector.best}, upper:${bySelector.upper}`);
-        }
-    }
+    const report = await estimateCO2("MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T", contracts);
 
-    console.log(`TOTAL| gas:${report.total.gas}, lower:${report.total.lower}, best:${report.total.best}, upper:${report.total.upper}`);
+    console.log(reportToString(report, contracts));
+
+    fs.writeFileSync("out.csv", reportToCSV(report, contracts));
 }
 
 main().catch((e) => {

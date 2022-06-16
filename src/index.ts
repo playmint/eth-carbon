@@ -512,3 +512,67 @@ async function getNetworkEmissionsTable(): Promise<EmissionsRow[]> {
         };
     });
 }
+
+export function reportToString(report: EmissionsReport, contracts: ContractFilter[]): string {
+    let s = "";
+
+    const estimatetoString = function (est: EmissionsEstimate) {
+        return `best:${est.best}, lower:${est.lower}, upper:${est.upper}`;
+    };
+
+    s += `Total - ${estimatetoString(report.total)}\n`;
+    s += "==========================================================================\n";
+    for (const contract of contracts) {
+        const byAddress = report.byAddress[contract.address];
+        if (byAddress === undefined) {
+            continue;
+        }
+
+        s += `${contract.address} - ${estimatetoString(byAddress.total)}\n`;
+        for (const selector in byAddress.bySelector) {
+            // selectors may have been looked up, so we only want the raw selectors
+            if (selector.includes("(") || selector == "contractCreation") {
+                continue;
+            }
+
+            const func = contract.selectorToFunction ? contract.selectorToFunction[selector] : undefined;
+
+            s += `    ${selector}${func !== undefined ? `|${func}` : ""} - ${estimatetoString(byAddress.bySelector[selector])}\n`;
+        }
+        s += "--------------------------------------------------------------------------\n";
+    }
+
+    return s;
+}
+
+export function reportToCSV(report: EmissionsReport, contracts: ContractFilter[]): string {
+    const headers = ["Address", "Function", "Selector", "Gas", "Best Guess", "Lower", "Upper"];
+
+    let s = `${headers.join(",")}\n`;
+
+    const makeRow = function (address: string, func: string, selector: string, est: EmissionsEstimate) {
+        return [address, func, selector, est.gas, est.best, est.lower, est.upper].join(",") + "\n";
+    }
+
+    s += makeRow("Total", "", "", report.total);
+    for (const contract of contracts) {
+        const byAddress = report.byAddress[contract.address];
+        if (byAddress === undefined) {
+            continue;
+        }
+
+        s += makeRow(contract.address, "", "", byAddress.total);
+        for (const selector in byAddress.bySelector) {
+            // selectors may have been looked up, so we only want the raw selectors
+            if (selector.includes("(") || selector == "contractCreation") {
+                continue;
+            }
+
+            const func = contract.selectorToFunction ? contract.selectorToFunction[selector] : undefined;
+
+            s += makeRow("", func !== undefined ? `"${func}"` : "", selector, byAddress.bySelector[selector]);
+        }
+    }
+
+    return s;
+}

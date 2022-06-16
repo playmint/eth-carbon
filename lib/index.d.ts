@@ -63,4 +63,6 @@ export declare type EmissionsReportForAddressAndDate = {
     };
 };
 export declare function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport>;
+export declare function reportToString(report: EmissionsReport, contracts: ContractFilter[]): string;
+export declare function reportToCSV(report: EmissionsReport, contracts: ContractFilter[]): string;
 //# sourceMappingURL=index.d.ts.map
