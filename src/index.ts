@@ -266,6 +266,7 @@ type EmissionsRow = {
 };
 
 export type EmissionsEstimate = {
+    txCount: number;
     gas: bigint;
     lower: number;
     best: number;
@@ -310,14 +311,14 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
     const transactions = await getTransactionsForContracts(contracts, apiKey);
 
     const report: EmissionsReport = {
-        total: { gas: 0n, lower: 0, best: 0, upper: 0 },
+        total: { txCount: 0, gas: 0n, lower: 0, best: 0, upper: 0 },
         byAddress: {},
         byDate: new Map<Date, EmissionsEstimate>()
     };
 
     for (const contractAddress in transactions) {
         const byAddress = {
-            total: { gas: 0n, lower: 0, best: 0, upper: 0 },
+            total: { txCount: 0, gas: 0n, lower: 0, best: 0, upper: 0 },
             byDate: new Map<Date, EmissionsReportForAddressAndDate>(),
             bySelector: {}
         };
@@ -332,25 +333,29 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
 
             if (!byAddress.byDate.has(date)) {
                 byAddress.byDate.set(date, {
-                    total: { gas: 0n, lower: 0, best: 0, upper: 0 },
+                    total: { txCount: 0, gas: 0n, lower: 0, best: 0, upper: 0 },
                     bySelector: {}
                 });
             }
             const byAddressAndDate = byAddress.byDate.get(date)!;
 
             if (byAddressAndDate.bySelector[transaction.selector] === undefined) {
-                byAddressAndDate.bySelector[transaction.selector] = { gas: 0n, lower: 0, best: 0, upper: 0 };
+                byAddressAndDate.bySelector[transaction.selector] = { txCount: 0, gas: 0n, lower: 0, best: 0, upper: 0 };
             }
             const byAddressAndDateAndSelector = byAddressAndDate.bySelector[transaction.selector];
 
             if (!report.byDate.has(date)) {
-                report.byDate.set(date, { gas: 0n, lower: 0, best: 0, upper: 0 });
+                report.byDate.set(date, { txCount: 0, gas: 0n, lower: 0, best: 0, upper: 0 });
             }
             const byDate = report.byDate.get(date)!;
 
             byAddressAndDate.total.gas += transaction.gasUsed;
             byAddressAndDateAndSelector.gas += transaction.gasUsed;
             byDate.gas += transaction.gasUsed;
+
+            ++byAddressAndDate.total.txCount;
+            ++byAddressAndDateAndSelector.txCount;
+            ++byDate.txCount;
         }
     }
 
@@ -372,6 +377,7 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         calculateEmissionsEstimate(byDate, emissionsRow, networkGasUsedNum);
 
         // add to total emissions
+        report.total.txCount += byDate.txCount;
         report.total.gas += byDate.gas;
         report.total.lower += byDate.lower;
         report.total.best += byDate.best;
@@ -387,6 +393,7 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
                 calculateEmissionsEstimate(byAddressAndDate.total, emissionsRow, networkGasUsedNum);
 
                 // update the address total
+                byAddress.total.txCount += byAddressAndDate.total.txCount;
                 byAddress.total.gas += byAddressAndDate.total.gas;
                 byAddress.total.lower += byAddressAndDate.total.lower;
                 byAddress.total.best += byAddressAndDate.total.best;
@@ -399,9 +406,10 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
 
                     // update selector total
                     if (byAddress.bySelector[selector] === undefined) {
-                        byAddress.bySelector[selector] = { gas: 0n, lower: 0, best: 0, upper: 0 };
+                        byAddress.bySelector[selector] = { txCount: 0, gas: 0n, lower: 0, best: 0, upper: 0 };
                     }
                     const byAddressAndSelector = byAddress.bySelector[selector];
+                    byAddressAndSelector.txCount += byAddressAndDateAndSelector.txCount;
                     byAddressAndSelector.gas += byAddressAndDateAndSelector.gas;
                     byAddressAndSelector.lower += byAddressAndDateAndSelector.lower;
                     byAddressAndSelector.best += byAddressAndDateAndSelector.best;
@@ -546,12 +554,12 @@ export function reportToString(report: EmissionsReport, contracts: ContractFilte
 }
 
 export function reportToCSV(report: EmissionsReport, contracts: ContractFilter[]): string {
-    const headers = ["Address", "Function", "Selector", "Gas", "Best Guess", "Lower", "Upper"];
+    const headers = ["Address", "Function", "Selector", "Tx Count", "Gas", "Best Guess", "Lower", "Upper"];
 
     let s = `${headers.join(",")}\n`;
 
     const makeRow = function (address: string, func: string, selector: string, est: EmissionsEstimate) {
-        return [address, func, selector, est.gas, est.best, est.lower, est.upper].join(",") + "\n";
+        return [address, func, selector, est.txCount, est.gas, est.best, est.lower, est.upper].join(",") + "\n";
     }
 
     s += makeRow("Total", "", "", report.total);

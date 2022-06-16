@@ -37,6 +37,7 @@ export declare function getTransactionsForContracts(contracts: ContractFilter[],
 }>;
 export declare function populateSelectorsForContractFilter(contractFilter: ContractFilter, apiKey?: string): Promise<void>;
 export declare type EmissionsEstimate = {
+    txCount: number;
     gas: bigint;
     lower: number;
     best: number;
