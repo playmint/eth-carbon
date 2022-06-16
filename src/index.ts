@@ -111,16 +111,34 @@ async function getTransactionsForAddress(address: string, apiKey: string): Promi
     return transactions;
 }
 
-export type SelectorToFunctionMap = { [selector: string]: string };
-
 export type ContractFilter = {
+    // contract address
     address: string;
-    shouldIncludeContractCreation?: boolean;    // default is true
-    shouldIncludeFailedTransactions?: boolean;  // default false
-    selectors?: Set<string>;                    // default includes everything
+    // include the contract creation transaction, defaults to true
+    shouldIncludeContractCreation?: boolean;
+    // include failed transactions, default is false
+    shouldIncludeFailedTransactions?: boolean;
+    // 4 byte function selectors to include, if both 'selectors' and 'functions' 
+    // are undefined, then all transactions will be included
+    selectors?: Set<string>;
+    // can include either function names or signatures, or both. If any function
+    // names are specified then the signature will be looked up from the ABI. If
+    // multiple functions have the same name then this will fail.
     functions?: Set<string>;
-    selectorToFunction?: SelectorToFunctionMap
+    // this is only required if any functions are specified just as a function name
+    // and not the full function signature. If an ABI is needed but none is given,
+    // then an attempt will be made to get the ABI from etherscan, if the contract
+    // isn't verified on etherscan then this step will fail. This can be a json
+    // string, or an array of objects fitting the ABIFunction type (e.g.
+    // ethers.utils.Interface.fragments). This is also used if selectors are
+    // specified in the filter rather than the function name, the report will
+    // attempt to display the function name in the report along with the selector
+    // to make it more readable, however if an abi can't be found then it will
+    // still produce the report using just the selectors.
     abi?: string | readonly ABIFunction[];
+    // used to convert a selector to a function name, if omitted then it will be
+    // automatically generated from the abi
+    selectorToFunction?: { [selector: string]: string };
 };
 
 
@@ -266,29 +284,29 @@ type EmissionsRow = {
 };
 
 export type EmissionsEstimate = {
-    txCount: number;
-    gas: bigint;
-    lower: number;
-    best: number;
-    upper: number;
+    txCount: number;// number of transactions
+    gas: bigint;    // amount of gas used for calculation
+    lower: number;  // lower bound
+    best: number;   // best guess
+    upper: number;  // upper bound
 };
 
 export type EmissionsReport = {
     total: EmissionsEstimate;
     byAddress: { [address: string]: EmissionsReportForAddress };
     byDate: Map<Date, EmissionsEstimate>;
-}
+};
 
 export type EmissionsReportForAddress = {
     total: EmissionsEstimate;
     byDate: Map<Date, EmissionsReportForAddressAndDate>;
     bySelector: { [selector: string]: EmissionsEstimate };
-}
+};
 
 export type EmissionsReportForAddressAndDate = {
     total: EmissionsEstimate;
     bySelector: { [selector: string]: EmissionsEstimate };
-}
+};
 
 export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): Promise<EmissionsReport> {
     const networkGasUsed: GasUsedRow[] = await getNetworkGasUsedTable();

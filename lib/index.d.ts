@@ -20,17 +20,16 @@ export declare type ABIFunction = {
     outputs?: ABIField[];
     stateMutability: "pure" | "view" | "payable" | "nonpayable";
 };
-export declare type SelectorToFunctionMap = {
-    [selector: string]: string;
-};
 export declare type ContractFilter = {
     address: string;
     shouldIncludeContractCreation?: boolean;
     shouldIncludeFailedTransactions?: boolean;
     selectors?: Set<string>;
     functions?: Set<string>;
-    selectorToFunction?: SelectorToFunctionMap;
     abi?: string | readonly ABIFunction[];
+    selectorToFunction?: {
+        [selector: string]: string;
+    };
 };
 export declare function getTransactionsForContracts(contracts: ContractFilter[], apiKey: string): Promise<{
     [address: string]: Transaction[];
