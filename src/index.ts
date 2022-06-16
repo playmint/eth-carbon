@@ -402,21 +402,39 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
                     byAddressAndSelector.lower += byAddressAndDateAndSelector.lower;
                     byAddressAndSelector.best += byAddressAndDateAndSelector.best;
                     byAddressAndSelector.upper += byAddressAndDateAndSelector.upper;
-
-                    // if we have a function sig for this selector then put that in the report too
-                    // TODO not this
-                    let contract = contracts.find((contract: ContractFilter) => {
-                        return contract.address == address;
-                    })
-                    if (contract!.selectorToFunction[selector] !== undefined) {
-
-                    }
                 };
             }
         };
     });
 
+    // de-mangle selectors for readability
+    for (const contract of contracts) {
+        if (contract.selectorToFunction === undefined) {
+            continue;
+        }
 
+        const byAddress = report.byAddress[contract.address];
+
+        // may not exist (if no txns are found matching the filter)
+        if (byAddress === undefined) {
+            continue;
+        }
+
+        const demangleSelectors = (emissionsForSelectors: { [selector: string]: EmissionsEstimate }) => {
+            for (const selector in emissionsForSelectors) {
+                const func = contract.selectorToFunction![selector];
+                if (func !== undefined) {
+                    emissionsForSelectors[func] = emissionsForSelectors[selector];
+                }
+            }
+        };
+
+        demangleSelectors(byAddress.bySelector);
+
+        byAddress.byDate.forEach((byAddressAndDate) => {
+            demangleSelectors(byAddressAndDate.bySelector);
+        });
+    }
 
     return report;
 }
