@@ -20,6 +20,8 @@ type RawTransaction = {
     input: string;
     gasUsed: string;
     isError: string;
+    to: string;
+    contractAddress: string;
 };
 
 export type Transaction = {
@@ -30,6 +32,7 @@ export type Transaction = {
     gasUsed: bigint;
     isError: boolean;
     selector: string;
+    isContractCreation: boolean;
 };
 
 export type ABIField = {
@@ -79,7 +82,8 @@ async function getTransactionsForAddress(address: string, apiKey: string): Promi
                 input: transaction.input,
                 gasUsed: BigInt(transaction.gasUsed),
                 isError: transaction.isError == "1",
-                selector: transaction.input.substring(2, 10).toLowerCase()
+                selector: transaction.input.substring(2, 10).toLowerCase(),
+                isContractCreation: transaction.contractAddress != null && transaction.contractAddress != ""
             };
         })
 
@@ -127,7 +131,7 @@ export async function getTransactionsForContracts(contracts: ContractFilter[], a
     for (let i = 0; i < contracts.length; ++i) {
         const contract = contracts[i];
 
-        if (contract.shouldIncludeContractCreation == undefined) {
+        if (contract.shouldIncludeContractCreation === undefined) {
             // default to true for this
             contract.shouldIncludeContractCreation = true;
         }
@@ -409,15 +413,20 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
 
     // lookup selectors for readability
     for (const contract of contracts) {
-        if (contract.selectorToFunction === undefined) {
-            continue;
-        }
-
         const byAddress = report.byAddress[contract.address];
 
         // may not exist (if no txns are found matching the filter)
         if (byAddress === undefined) {
             continue;
+        }
+
+        if (contract.selectorToFunction === undefined) {
+            contract.selectorToFunction = {};
+        }
+
+        // if we get contract creation then it'll be the first txn
+        if (transactions[contract.address][0].isContractCreation) {
+            contract.selectorToFunction[transactions[contract.address][0].selector] = "contractCreation";
         }
 
         const lookupSelectors = (emissionsForSelectors: { [selector: string]: EmissionsEstimate }) => {

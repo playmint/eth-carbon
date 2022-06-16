@@ -6,6 +6,7 @@ export declare type Transaction = {
     gasUsed: bigint;
     isError: boolean;
     selector: string;
+    isContractCreation: boolean;
 };
 export declare type ABIField = {
     name: string;
