@@ -64,7 +64,7 @@ async function httpsGet(url: string): Promise<string> {
     });
 }
 
-async function getTransactionsForAddress(apiKey: string, address: string): Promise<Transaction[]> {
+async function getTransactionsForAddress(address: string, apiKey: string): Promise<Transaction[]> {
     let transactions: Transaction[] = [];
 
     let startBlock = 0;
@@ -107,16 +107,21 @@ async function getTransactionsForAddress(apiKey: string, address: string): Promi
     return transactions;
 }
 
+export type SelectorToFunctionMap = { [selector: string]: string };
+
 export type ContractFilter = {
     address: string;
     shouldIncludeContractCreation?: boolean;    // default is true
     shouldIncludeFailedTransactions?: boolean;  // default false
     selectors?: Set<string>;                    // default includes everything
     functions?: Set<string>;
+    selectorToFunction?: SelectorToFunctionMap
     abi?: string | readonly ABIFunction[];
 };
 
-export async function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{ [address: string]: Transaction[] }> {
+
+
+export async function getTransactionsForContracts(contracts: ContractFilter[], apiKey: string): Promise<{ [address: string]: Transaction[] }> {
     let result: { [address: string]: Transaction[] } = {};
 
     for (let i = 0; i < contracts.length; ++i) {
@@ -127,10 +132,10 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
             contract.shouldIncludeContractCreation = true;
         }
 
-        await populateSelectorsForContractFilter(apiKey, contract);
+        await populateSelectorsForContractFilter(contract, apiKey);
 
         let filteredTransactions = [];
-        let transactions = await getTransactionsForAddress(apiKey, contract.address);
+        let transactions = await getTransactionsForAddress(contract.address, apiKey);
 
         if (contract.shouldIncludeContractCreation) {
             filteredTransactions.push(transactions[0]);
@@ -154,35 +159,16 @@ export async function getTransactionsForContracts(apiKey: string, contracts: Con
     return result;
 }
 
-export async function populateSelectorsForContractFilter(apiKey: string, contractFilter: ContractFilter) {
-    if (contractFilter.functions) {
-        if (!contractFilter.selectors) {
-            contractFilter.selectors = new Set<string>();
-        }
+export async function populateSelectorsForContractFilter(contractFilter: ContractFilter, apiKey?: string) {
+    if (contractFilter.selectorToFunction === undefined) {
+        contractFilter.selectorToFunction = {};
 
-        let functionsToLookUp = new Map<string, ABIFunction | undefined>();
-        contractFilter.functions.forEach((func) => {
-            // if any function sigs are just the name, then we'll need to look
-            // the contract up on etherscan
-            if (func.indexOf("(") == -1) {
-                functionsToLookUp.set(func, undefined); // we'll fill in the function later when we find it
-            }
-            else {
-                contractFilter.selectors!.add(keccak256(func.replace(/ /g, "")).toString("hex").substring(0, 8));
-            }
-        });
-
-        if (functionsToLookUp.size > 0) {
-            if (contractFilter.abi) {
-                if (typeof (contractFilter.abi) === "string") {
-                    contractFilter.abi = JSON.parse(contractFilter.abi);
-                }
-            }
-            else {
-                // no ABI, attempt to look it up on etherscan
+        if (contractFilter.abi === undefined) {
+            if (apiKey !== undefined) {
                 let addressForABI = contractFilter.address;
 
                 {
+                    // check if it's a proxy contract
                     const responseStr = await httpsGet(`https://api.etherscan.io/api?module=proxy&action=eth_getStorageAt&address=${contractFilter.address}&position=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc&tag=latest&apikey=${apiKey}`);
                     const response: RPCResponse = JSON.parse(responseStr);
 
@@ -196,33 +182,69 @@ export async function populateSelectorsForContractFilter(apiKey: string, contrac
 
                 const responseStr = await httpsGet(`https://api.etherscan.io/api?module=contract&action=getabi&address=${addressForABI}&apikey=${apiKey}`);
                 const response: Response<string> = JSON.parse(responseStr);
-                if (response.status != "1") {
-                    throw `${contractFilter.address}: failed to get ABI from etherscan`;
+                if (response.status == "1") {
+                    contractFilter.abi = JSON.parse(response.result);
                 }
-                contractFilter.abi = JSON.parse(response.result);
-            }
-
-            const abi = contractFilter.abi as ABIFunction[];
-            for (let i = 0; i < abi.length; ++i) {
-                if (abi[i].type == "function" && functionsToLookUp.has(abi[i].name)) {
-                    if (functionsToLookUp.get(abi[i].name) == undefined) {
-                        functionsToLookUp.set(abi[i].name, abi[i]);
-
-                        let sig = `${abi[i].name}(${abi[i].inputs.map((value) => value.type).join(",")})`;
-                        contractFilter.selectors!.add(keccak256(sig).toString("hex").substring(0, 8));
-                    }
-                    else {
-                        throw `${contractFilter.address}: multiple functions found with name '${abi[i].name}'`;
-                    }
+                else {
+                    console.warn(`${contractFilter.address}: failed to get ABI from etherscan`);
                 }
             }
-
-            functionsToLookUp.forEach((value, key) => {
-                if (value == undefined) {
-                    throw `${contractFilter.address}: no function found with name '${key}'`;
-                }
-            });
         }
+        else if (typeof (contractFilter.abi) === "string") {
+            contractFilter.abi = JSON.parse(contractFilter.abi);
+        }
+
+        if (contractFilter.abi !== undefined) {
+            const abi = contractFilter.abi as readonly ABIFunction[];
+            for (const func of abi) {
+                if (func.type == "function") {
+                    const sig = `${func.name}(${func.inputs.map((value) => value.type).join(",")})`;
+                    const selector = keccak256(sig).toString("hex").substring(0, 8);
+
+                    contractFilter.selectorToFunction[selector] = sig;
+                }
+            }
+        }
+    }
+
+    if (contractFilter.functions) {
+        if (!contractFilter.selectors) {
+            contractFilter.selectors = new Set<string>();
+        }
+
+        contractFilter.functions.forEach((func) => {
+            // if any function sigs are just the name, we need to figure out the full sig
+            if (func.indexOf("(") == -1) {
+                const selectors: string[] = Object.keys(contractFilter.selectorToFunction!).filter((selector) => {
+                    const sig = contractFilter.selectorToFunction![selector];
+                    const name = sig.substring(0, sig.indexOf("("));
+                    return name == func;
+                });
+
+                if (selectors.length == 0) {
+                    throw `'${func}' not found in abi`;
+                }
+                else if (selectors.length > 1) {
+                    let errorStr = `'${func}' is ambiguous, could be:\n`;
+                    for (const selector of selectors) {
+                        errorStr += contractFilter.selectorToFunction![selector] + "\n";
+                    }
+                    throw errorStr;
+                }
+
+                contractFilter.selectors!.add(selectors[0]);
+            }
+            else {
+                const sig = func.replace(/ /g, "");
+                const selector = keccak256(sig).toString("hex").substring(0, 8);
+                contractFilter.selectors!.add(selector);
+
+                // if we don't have an abi then this selector might not be in the map already
+                if (contractFilter.selectorToFunction![selector] === undefined) {
+                    contractFilter.selectorToFunction![selector] = sig;
+                }
+            }
+        });
     }
 }
 
@@ -281,7 +303,7 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
         throw "date of first row of network gas used and network emissions csvs don't match";
     }
 
-    const transactions = await getTransactionsForContracts(apiKey, contracts);
+    const transactions = await getTransactionsForContracts(contracts, apiKey);
 
     const report: EmissionsReport = {
         total: { gas: 0n, lower: 0, best: 0, upper: 0 },
@@ -380,6 +402,15 @@ export async function estimateCO2(apiKey: string, contracts: ContractFilter[]): 
                     byAddressAndSelector.lower += byAddressAndDateAndSelector.lower;
                     byAddressAndSelector.best += byAddressAndDateAndSelector.best;
                     byAddressAndSelector.upper += byAddressAndDateAndSelector.upper;
+
+                    // if we have a function sig for this selector then put that in the report too
+                    // TODO not this
+                    let contract = contracts.find((contract: ContractFilter) => {
+                        return contract.address == address;
+                    })
+                    if (contract!.selectorToFunction[selector] !== undefined) {
+
+                    }
                 };
             }
         };

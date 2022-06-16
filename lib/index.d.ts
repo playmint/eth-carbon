@@ -19,18 +19,22 @@ export declare type ABIFunction = {
     outputs?: ABIField[];
     stateMutability: "pure" | "view" | "payable" | "nonpayable";
 };
+export declare type SelectorToFunctionMap = {
+    [selector: string]: string;
+};
 export declare type ContractFilter = {
     address: string;
     shouldIncludeContractCreation?: boolean;
     shouldIncludeFailedTransactions?: boolean;
     selectors?: Set<string>;
     functions?: Set<string>;
+    selectorToFunction?: SelectorToFunctionMap;
     abi?: string | readonly ABIFunction[];
 };
-export declare function getTransactionsForContracts(apiKey: string, contracts: ContractFilter[]): Promise<{
+export declare function getTransactionsForContracts(contracts: ContractFilter[], apiKey: string): Promise<{
     [address: string]: Transaction[];
 }>;
-export declare function populateSelectorsForContractFilter(apiKey: string, contractFilter: ContractFilter): Promise<void>;
+export declare function populateSelectorsForContractFilter(contractFilter: ContractFilter, apiKey?: string): Promise<void>;
 export declare type EmissionsEstimate = {
     gas: bigint;
     lower: number;
