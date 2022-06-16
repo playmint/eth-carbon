@@ -22,7 +22,7 @@ async function main() {
         { address: "0xe3c37f80077689f660Cd63BD48D81C746dF51363" }
     ];
 
-    const report = await estimateCO2("MYTE9PTHZD1R3HBSKZNTIM9BU34YEWZI5T", contracts);
+    const report = await estimateCO2(fs.readFileSync("apiKey.txt").toString(), contracts);
 
     console.log(reportToString(report, contracts));
 
