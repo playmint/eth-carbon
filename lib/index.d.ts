@@ -47,11 +47,15 @@ export declare type EmissionsReport = {
     byAddress: {
         [address: string]: EmissionsReportForAddress;
     };
-    byDate: Map<Date, EmissionsEstimate>;
+    byDate: {
+        [date: string]: EmissionsEstimate;
+    };
 };
 export declare type EmissionsReportForAddress = {
     total: EmissionsEstimate;
-    byDate: Map<Date, EmissionsReportForAddressAndDate>;
+    byDate: {
+        [date: string]: EmissionsReportForAddressAndDate;
+    };
     bySelector: {
         [selector: string]: EmissionsEstimate;
     };
