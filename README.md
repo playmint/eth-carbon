@@ -20,12 +20,12 @@ type EmissionsEstimate = {
 type EmissionsReport = {
     total: EmissionsEstimate;
     byAddress: { [address: string]: EmissionsReportForAddress };
-    byDate: Map<Date, EmissionsEstimate>;
+    byDate: { [date: string]: EmissionsEstimate };
 };
 
 type EmissionsReportForAddress = {
     total: EmissionsEstimate;
-    byDate: Map<Date, EmissionsReportForAddressAndDate>;
+    byDate: { [date: string]: EmissionsReportForAddressAndDate };
     bySelector: { [selector: string]: EmissionsEstimate };
 };
 
