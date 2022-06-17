@@ -1,4 +1,26 @@
 {
+  "name": "@playmint/eth-carbon",
+  "author": "Playmint",
+  "license": "CC0-1.0",
+  "version": "1.0.0",
+  "description": "Small library for calculating carbon footprint of Ethereum smart contracts",
+  "homepage": "https://github.com/playmint/eth-carbon",
+  "repository": "github:playmint/eth-carbon",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "keywords": [
+    "ethereum",
+    "carbon",
+    "emissions",
+    "co2",
+    "smart-contracts"
+  ],
+  "files": [
+    "lib/",
+    "src/",
+    "LICENSE.md",
+    "README.md"
+  ],
   "dependencies": {
     "keccak256": "^1.0.6"
   },

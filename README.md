@@ -1,4 +1,5 @@
 # eth-carbon
+[![NPM Package](https://img.shields.io/npm/v/@playmint/eth-carbon.svg?style=flat-square)](https://www.npmjs.com/package/@playmint/eth-carbon)
 Small library to estimate the CO2 emissions that Ethereum smart contracts are responsible for.
 
 ## Installation
