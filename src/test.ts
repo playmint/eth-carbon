@@ -1,4 +1,4 @@
-import { EmissionsEstimate, estimateCO2 } from "./index";
+import { reportToString, reportToCSV, estimateCO2 } from "./index";
 import fs from "fs";
 
 async function main() {
@@ -23,18 +23,10 @@ async function main() {
     ];
 
     const report = await estimateCO2(fs.readFileSync("apiKey.txt").toString(), contracts);
-    console.log(`Total - ${estimateStr(report.total)}`);
-    for (const address in report.byAddress) {
-        const byAddress = report.byAddress[address];
-        console.log(`${address} - ${estimateStr(byAddress.total)}`);
-        for (const selector in byAddress.bySelector) {
-            console.log(`${selector} - ${estimateStr(byAddress.bySelector[selector])}`);
-        }
-    }
-}
 
-function estimateStr(est: EmissionsEstimate) {
-    return `best:${est.best}, lower:${est.lower}, upper:${est.upper}`;
+    console.log(reportToString(report, contracts));
+
+    fs.writeFileSync("out.csv", reportToCSV(report, contracts));
 }
 
 main().catch((e) => {

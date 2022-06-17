@@ -16,8 +16,8 @@
     "smart-contracts"
   ],
   "files": [
-    "lib/",
-    "src/",
+    "lib/index.*",
+    "src/index.ts",
     "LICENSE.md",
     "README.md"
   ],
